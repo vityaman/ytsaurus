@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     ansi.cpp
+    edit_text.cpp
     format.cpp
     grammar.cpp
     local.cpp

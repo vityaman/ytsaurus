@@ -1,6 +1,7 @@
 #include "local.h"
 
 #include "ansi.h"
+#include "edit_text.h"
 #include "grammar.h"
 #include "parser_call_stack.h"
 #include "token.h"
@@ -8,7 +9,6 @@
 #include <yql/essentials/sql/v1/complete/antlr4/c3i.h>
 #include <yql/essentials/sql/v1/complete/antlr4/c3t.h>
 #include <yql/essentials/sql/v1/complete/antlr4/vocabulary.h>
-#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
 
@@ -80,6 +80,7 @@ namespace NSQLComplete {
             context.IsTypeName = IsTypeNameMatched(candidates);
             context.Function = FunctionMatch(tokens, candidates);
             context.Hint = HintMatch(candidates);
+
             context.EditRange = CurrentTokenEditTextRange(tokens, caret);
 
             return context;
@@ -216,46 +217,6 @@ namespace NSQLComplete {
                 return tokens.size() - 3;
             }
             return std::nullopt;
-        }
-
-        static TEditTextRange CurrentTokenEditTextRange(const TParsedTokenList& tokens, TCaretTokenPosition caret) {
-            if (caret.Position == 0 || tokens.size() <= caret.PrevTokenIndex) {
-                return {.Begin = caret.Position};
-            }
-
-            const TString& prevContent = tokens.at(caret.PrevTokenIndex).Content;
-            if (caret.PrevTokenPosition == caret.NextTokenIndex) {
-                return {
-                    .Begin = caret.PrevTokenPosition,
-                    .End = prevContent.size(),
-                };
-            }
-
-            if (IsWordBoundary(prevContent.back())) {
-                return {
-                    .Begin = caret.Position,
-                };
-            }
-
-            return {
-                .Begin = caret.PrevTokenPosition,
-                .End = caret.PrevTokenPosition + prevContent.size(),
-            };
-        }
-
-        static TEditTextRange MultiTokenEditTextRange(
-            const TParsedTokenList& tokens, TCaretTokenPosition caret, size_t beginIndex) {
-            TEditTextRange range;
-            range.End = caret.PrevTokenPosition + tokens.at(caret.PrevTokenIndex).Content.size();
-
-            size_t contentLength = 0;
-            for (size_t i = beginIndex; i <= caret.PrevTokenIndex; ++i) {
-                contentLength += tokens[i].Content.size();
-            }
-
-            range.Begin = range.End - contentLength;
-
-            return range;
         }
 
         const ISqlGrammar* Grammar;
