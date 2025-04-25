@@ -35,14 +35,37 @@ namespace NSQLComplete {
         size_t cursor = 0;
         for (size_t i = 0; i < tokens.size(); ++i) {
             const auto& content = tokens[i].Content;
+
             cursor += content.size();
-            if (cursorPosition < cursor) {
-                return {i, i};
-            } else if (cursorPosition == cursor && IsWordBoundary(content.back())) {
-                return {i, i + 1};
+            if (cursor < cursorPosition) {
+                continue;
             }
+
+            TCaretTokenPosition position = {
+                .PrevTokenIndex = i,
+                .NextTokenIndex = i,
+                .PrevTokenPosition = cursor - content.size(),
+            };
+
+            if (cursor == cursorPosition) {
+                position.NextTokenIndex += 1;
+            }
+
+            return position;
         }
-        return {std::max(tokens.size(), static_cast<size_t>(1)) - 1, tokens.size()};
+
+        TCaretTokenPosition position = {
+            .PrevTokenIndex = 0,
+            .NextTokenIndex = tokens.size(),
+            .PrevTokenPosition = 0,
+        };
+
+        if (!tokens.empty()) {
+            position.PrevTokenIndex = tokens.size() - 1;
+            position.PrevTokenPosition = cursor - tokens.back().Content.size();
+        }
+
+        return position;
     }
 
     bool EndsWith(const TParsedTokenList& tokens, const TVector<TStringBuf>& pattern) {
