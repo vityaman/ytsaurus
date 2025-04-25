@@ -1,7 +1,6 @@
 #pragma once
 
 #include <yql/essentials/sql/v1/complete/core/input.h>
-#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <yql/essentials/parser/lexer_common/lexer.h>
 
@@ -13,6 +12,7 @@ namespace NSQLComplete {
     struct TCaretTokenPosition {
         size_t PrevTokenIndex;
         size_t NextTokenIndex;
+        size_t PrevTokenPosition;
     };
 
     bool GetStatement(NSQLTranslation::ILexer::TPtr& lexer, TCompletionInput input, TCompletionInput& output);
