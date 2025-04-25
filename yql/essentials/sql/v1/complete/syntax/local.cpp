@@ -80,8 +80,7 @@ namespace NSQLComplete {
             context.IsTypeName = IsTypeNameMatched(candidates);
             context.Function = FunctionMatch(tokens, candidates);
             context.Hint = HintMatch(candidates);
-
-            context.EditRange = DefaultEditTextRange(tokens, caret);
+            context.EditRange = CurrentTokenEditTextRange(tokens, caret);
 
             return context;
         }
@@ -219,10 +218,11 @@ namespace NSQLComplete {
             return std::nullopt;
         }
 
-        static TEditTextRange DefaultEditTextRange(const TParsedTokenList& tokens, TCaretTokenPosition caret) {
+        static TEditTextRange CurrentTokenEditTextRange(const TParsedTokenList& tokens, TCaretTokenPosition caret) {
             if (caret.Position == 0 || tokens.size() <= caret.PrevTokenIndex) {
                 return {.Begin = caret.Position};
             }
+
             const TString& prevContent = tokens.at(caret.PrevTokenIndex).Content;
             if (caret.PrevTokenPosition == caret.NextTokenIndex) {
                 return {
@@ -230,15 +230,32 @@ namespace NSQLComplete {
                     .End = prevContent.size(),
                 };
             }
+
             if (IsWordBoundary(prevContent.back())) {
                 return {
                     .Begin = caret.Position,
                 };
             }
+
             return {
-                .Begin = caret.Position - prevContent.size(),
-                .End = caret.Position,
+                .Begin = caret.PrevTokenPosition,
+                .End = caret.PrevTokenPosition + prevContent.size(),
             };
+        }
+
+        static TEditTextRange MultiTokenEditTextRange(
+            const TParsedTokenList& tokens, TCaretTokenPosition caret, size_t beginIndex) {
+            TEditTextRange range;
+            range.End = caret.PrevTokenPosition + tokens.at(caret.PrevTokenIndex).Content.size();
+
+            size_t contentLength = 0;
+            for (size_t i = beginIndex; i <= caret.PrevTokenIndex; ++i) {
+                contentLength += tokens[i].Content.size();
+            }
+
+            range.Begin = range.End - contentLength;
+
+            return range;
         }
 
         const ISqlGrammar* Grammar;
