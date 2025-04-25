@@ -8,6 +8,7 @@
 #include <yql/essentials/sql/v1/complete/antlr4/c3i.h>
 #include <yql/essentials/sql/v1/complete/antlr4/c3t.h>
 #include <yql/essentials/sql/v1/complete/antlr4/vocabulary.h>
+#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
 
@@ -73,24 +74,27 @@ namespace NSQLComplete {
                 return {};
             }
 
-            return {
-                .Keywords = SiftedKeywords(candidates),
-                .Pragma = PragmaMatch(tokens, candidates),
-                .IsTypeName = IsTypeNameMatched(candidates),
-                .Function = FunctionMatch(tokens, candidates),
-                .Hint = HintMatch(candidates),
-            };
+            TLocalSyntaxContext context;
+            context.Keywords = SiftedKeywords(candidates);
+            context.Pragma = PragmaMatch(tokens, candidates);
+            context.IsTypeName = IsTypeNameMatched(candidates);
+            context.Function = FunctionMatch(tokens, candidates);
+            context.Hint = HintMatch(candidates);
+
+            context.EditRange = DefaultEditTextRange(tokens, caret);
+
+            return context;
         }
 
     private:
-        IC3Engine::TConfig ComputeC3Config() {
+        IC3Engine::TConfig ComputeC3Config() const {
             return {
                 .IgnoredTokens = ComputeIgnoredTokens(),
                 .PreferredRules = ComputePreferredRules(),
             };
         }
 
-        std::unordered_set<TTokenId> ComputeIgnoredTokens() {
+        std::unordered_set<TTokenId> ComputeIgnoredTokens() const {
             auto ignoredTokens = Grammar->GetAllTokens();
             for (auto keywordToken : Grammar->GetKeywordTokens()) {
                 ignoredTokens.erase(keywordToken);
@@ -101,11 +105,40 @@ namespace NSQLComplete {
             return ignoredTokens;
         }
 
-        std::unordered_set<TRuleId> ComputePreferredRules() {
+        static std::unordered_set<TRuleId> ComputePreferredRules() {
             return GetC3PreferredRules();
         }
 
-        TLocalSyntaxContext::TKeywords SiftedKeywords(const TC3Candidates& candidates) {
+        bool TokenizePrefix(TCompletionInput input, TParsedTokenList& tokens, TCaretTokenPosition& caret) const {
+            NYql::TIssues issues;
+            if (!NSQLTranslation::Tokenize(
+                    *Lexer_, TString(input.Text), /* queryName = */ "",
+                    tokens, issues, /* maxErrors = */ 1)) {
+                return false;
+            }
+
+            Y_ENSURE(!tokens.empty() && tokens.back().Name == "EOF");
+            tokens.pop_back();
+
+            caret = CaretTokenPosition(tokens, input.CursorPosition);
+            tokens.crop(caret.NextTokenIndex + 1);
+            return true;
+        }
+
+        static bool IsCaretEnslosed(const TParsedTokenList& tokens, TCaretTokenPosition caret) {
+            if (tokens.empty() || caret.PrevTokenIndex != caret.NextTokenIndex) {
+                return false;
+            }
+
+            const auto& token = tokens.back();
+            return token.Name == "STRING_VALUE" ||
+                   token.Name == "ID_QUOTED" ||
+                   token.Name == "DIGIGTS" ||
+                   token.Name == "INTEGER_VALUE" ||
+                   token.Name == "REAL";
+        }
+
+        TLocalSyntaxContext::TKeywords SiftedKeywords(const TC3Candidates& candidates) const {
             const auto& vocabulary = Grammar->GetVocabulary();
             const auto& keywordTokens = Grammar->GetKeywordTokens();
 
@@ -121,41 +154,37 @@ namespace NSQLComplete {
             return keywords;
         }
 
-        std::optional<TLocalSyntaxContext::TPragma> PragmaMatch(
+        static std::optional<TLocalSyntaxContext::TPragma> PragmaMatch(
             const TParsedTokenList& tokens, const TC3Candidates& candidates) {
             if (!AnyOf(candidates.Rules, RuleAdapted(IsLikelyPragmaStack))) {
                 return std::nullopt;
             }
 
             TLocalSyntaxContext::TPragma pragma;
-            if (EndsWith(tokens, {"ID_PLAIN", "DOT"})) {
-                pragma.Namespace = tokens[tokens.size() - 2].Content;
-            } else if (EndsWith(tokens, {"ID_PLAIN", "DOT", ""})) {
-                pragma.Namespace = tokens[tokens.size() - 3].Content;
+            if (auto index = PragmaNamespaceTokenIndex(tokens)) {
+                pragma.Namespace = tokens[*index].Content;
             }
             return pragma;
         }
 
-        bool IsTypeNameMatched(const TC3Candidates& candidates) {
+        static bool IsTypeNameMatched(const TC3Candidates& candidates) {
             return AnyOf(candidates.Rules, RuleAdapted(IsLikelyTypeStack));
         }
 
-        std::optional<TLocalSyntaxContext::TFunction> FunctionMatch(
+        static std::optional<TLocalSyntaxContext::TFunction> FunctionMatch(
             const TParsedTokenList& tokens, const TC3Candidates& candidates) {
             if (!AnyOf(candidates.Rules, RuleAdapted(IsLikelyFunctionStack))) {
                 return std::nullopt;
             }
 
             TLocalSyntaxContext::TFunction function;
-            if (EndsWith(tokens, {"ID_PLAIN", "NAMESPACE"})) {
-                function.Namespace = tokens[tokens.size() - 2].Content;
-            } else if (EndsWith(tokens, {"ID_PLAIN", "NAMESPACE", ""})) {
-                function.Namespace = tokens[tokens.size() - 3].Content;
+            if (auto index = FunctionNamespaceTokenIndex(tokens)) {
+                function.Namespace = tokens[*index].Content;
             }
             return function;
         }
 
-        std::optional<TLocalSyntaxContext::THint> HintMatch(const TC3Candidates& candidates) {
+        static std::optional<TLocalSyntaxContext::THint> HintMatch(const TC3Candidates& candidates) {
             // TODO(YQL-19747): detect local contexts with a single iteration through the candidates.Rules
             auto rule = FindIf(candidates.Rules, RuleAdapted(IsLikelyHintStack));
             if (rule == std::end(candidates.Rules)) {
@@ -172,33 +201,44 @@ namespace NSQLComplete {
             };
         }
 
-        bool TokenizePrefix(TCompletionInput input, TParsedTokenList& tokens, TCaretTokenPosition& caret) {
-            NYql::TIssues issues;
-            if (!NSQLTranslation::Tokenize(
-                    *Lexer_, TString(input.Text), /* queryName = */ "",
-                    tokens, issues, /* maxErrors = */ 1)) {
-                return false;
+        static std::optional<size_t> PragmaNamespaceTokenIndex(const TParsedTokenList& tokens) {
+            if (EndsWith(tokens, {"ID_PLAIN", "DOT"})) {
+                return tokens.size() - 2;
+            } else if (EndsWith(tokens, {"ID_PLAIN", "DOT", ""})) {
+                return tokens.size() - 3;
             }
-
-            Y_ENSURE(!tokens.empty() && tokens.back().Name == "EOF");
-            tokens.pop_back();
-
-            caret = CaretTokenPosition(tokens, input.CursorPosition);
-            tokens.crop(caret.NextTokenIndex + 1);
-            return true;
+            return std::nullopt;
         }
 
-        bool IsCaretEnslosed(const TParsedTokenList& tokens, TCaretTokenPosition caret) {
-            if (tokens.empty() || caret.PrevTokenIndex != caret.NextTokenIndex) {
-                return false;
+        static std::optional<size_t> FunctionNamespaceTokenIndex(const TParsedTokenList& tokens) {
+            if (EndsWith(tokens, {"ID_PLAIN", "NAMESPACE"})) {
+                return tokens.size() - 2;
+            } else if (EndsWith(tokens, {"ID_PLAIN", "NAMESPACE", ""})) {
+                return tokens.size() - 3;
             }
+            return std::nullopt;
+        }
 
-            const auto& token = tokens.back();
-            return token.Name == "STRING_VALUE" ||
-                   token.Name == "ID_QUOTED" ||
-                   token.Name == "DIGIGTS" ||
-                   token.Name == "INTEGER_VALUE" ||
-                   token.Name == "REAL";
+        static TEditTextRange DefaultEditTextRange(const TParsedTokenList& tokens, TCaretTokenPosition caret) {
+            if (caret.Position == 0 || tokens.size() <= caret.PrevTokenIndex) {
+                return {.Begin = caret.Position};
+            }
+            const TString& prevContent = tokens.at(caret.PrevTokenIndex).Content;
+            if (caret.PrevTokenPosition == caret.NextTokenIndex) {
+                return {
+                    .Begin = caret.PrevTokenPosition,
+                    .End = prevContent.size(),
+                };
+            }
+            if (IsWordBoundary(prevContent.back())) {
+                return {
+                    .Begin = caret.Position,
+                };
+            }
+            return {
+                .Begin = caret.Position - prevContent.size(),
+                .End = caret.Position,
+            };
         }
 
         const ISqlGrammar* Grammar;

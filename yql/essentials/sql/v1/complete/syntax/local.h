@@ -9,6 +9,11 @@
 
 namespace NSQLComplete {
 
+    struct TEditTextRange {
+        size_t Begin = 0;
+        size_t End = Begin;
+    };
+
     struct TLocalSyntaxContext {
         using TKeywords = THashMap<TString, TVector<TString>>;
 
@@ -29,6 +34,7 @@ namespace NSQLComplete {
         bool IsTypeName = false;
         std::optional<TFunction> Function;
         std::optional<THint> Hint;
+        TEditTextRange EditRange;
     };
 
     class ILocalSyntaxAnalysis {

@@ -13,6 +13,7 @@ namespace NSQLComplete {
         size_t PrevTokenIndex;
         size_t NextTokenIndex;
         size_t PrevTokenPosition;
+        size_t Position;
     };
 
     bool GetStatement(NSQLTranslation::ILexer::TPtr& lexer, TCompletionInput input, TCompletionInput& output);

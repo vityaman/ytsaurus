@@ -38,8 +38,7 @@ namespace NSQLComplete {
 
             TLocalSyntaxContext context = SyntaxAnalysis->Analyze(input);
 
-            TStringBuf prefix = input.Text.Head(input.CursorPosition);
-            TCompletedToken completedToken = GetCompletedToken(prefix);
+            TCompletedToken completedToken = GetCompletedToken(input, context.EditRange);
 
             return GetCandidates(std::move(context), completedToken)
                 .Apply([completedToken](NThreading::TFuture<TVector<TCandidate>> f) {
@@ -51,10 +50,10 @@ namespace NSQLComplete {
         }
 
     private:
-        TCompletedToken GetCompletedToken(TStringBuf prefix) const {
+        TCompletedToken GetCompletedToken(TCompletionInput input, TEditTextRange range) {
             return {
-                .Content = LastWord(prefix),
-                .SourcePosition = LastWordIndex(prefix),
+                .Content = input.Text.SubStr(range.Begin, range.End - range.Begin),
+                .SourcePosition = range.Begin,
             };
         }
 

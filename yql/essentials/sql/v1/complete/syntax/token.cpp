@@ -45,6 +45,7 @@ namespace NSQLComplete {
                 .PrevTokenIndex = i,
                 .NextTokenIndex = i,
                 .PrevTokenPosition = cursor - content.size(),
+                .Position = cursorPosition,
             };
 
             if (cursor == cursorPosition) {
@@ -58,6 +59,7 @@ namespace NSQLComplete {
             .PrevTokenIndex = 0,
             .NextTokenIndex = tokens.size(),
             .PrevTokenPosition = 0,
+            .Position = cursorPosition,
         };
 
         if (!tokens.empty()) {
