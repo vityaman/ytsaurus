@@ -3,6 +3,8 @@
 #include "frequency.h"
 #include "name_index.h"
 
+#include <yql/essentials/core/sql_types/normalize_name.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
 
@@ -84,7 +86,7 @@ namespace NSQLComplete {
     TVector<TString> Pruned(TVector<TString> names, const THashMap<TString, size_t>& frequency) {
         THashMap<TString, TVector<std::tuple<TString, size_t>>> groups;
 
-        for (auto& [normalized, original] : BuildNameIndex(std::move(names), NormalizeName)) {
+        for (auto& [normalized, original] : BuildNameIndex(std::move(names), [](const TString& s) { return NYql::NormalizeName(s); })) {
             size_t freq = 0;
             if (const size_t* it = frequency.FindPtr(original)) {
                 freq = *it;

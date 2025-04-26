@@ -1,6 +1,6 @@
 #include "frequency.h"
 
-#include "name_index.h"
+#include <yql/essentials/core/sql_types/normalize_name.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
@@ -96,19 +96,19 @@ namespace NSQLComplete {
     }
 
     TFrequencyData ParseJsonFrequencyData(const TStringBuf text) {
-        return ParseJsonFrequencyData(text, NormalizeName);
+        return ParseJsonFrequencyData(text, [](const TString& s) { return NYql::NormalizeName(s); });
     }
 
     TFrequencyData LoadFrequencyData() {
         TString text;
         Y_ENSURE(NResource::FindExact("rules_corr_basic.json", &text));
-        return ParseJsonFrequencyData(text, NormalizeName);
+        return ParseJsonFrequencyData(text, [](const TString& s) { return NYql::NormalizeName(s); });
     }
 
     TFrequencyData LoadFrequencyDataForPrunning() {
         TString text;
         Y_ENSURE(NResource::FindExact("rules_corr_basic.json", &text));
-        return ParseJsonFrequencyData(text, UnchangedName);
+        return ParseJsonFrequencyData(text, [](const TString& s) { return s; });
     }
 
 } // namespace NSQLComplete

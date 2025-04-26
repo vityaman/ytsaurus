@@ -5,11 +5,13 @@
 
 #include <yql/essentials/sql/v1/complete/text/case.h>
 
+#include <yql/essentials/core/sql_types/normalize_name.h>
+
 namespace NSQLComplete {
 
     const TVector<TStringBuf> FilteredByPrefix(const TString& prefix, const TNameIndex& index Y_LIFETIME_BOUND) {
         TNameIndexEntry normalized = {
-            .Normalized = NormalizeName(prefix),
+            .Normalized = NYql::NormalizeName(prefix),
             .Original = "",
         };
 
@@ -73,13 +75,13 @@ namespace NSQLComplete {
     class TStaticNameService: public INameService {
     public:
         explicit TStaticNameService(NameSet names, IRanking::TPtr ranking)
-            : Pragmas_(BuildNameIndex(std::move(names.Pragmas), NormalizeName))
-            , Types_(BuildNameIndex(std::move(names.Types), NormalizeName))
-            , Functions_(BuildNameIndex(std::move(names.Functions), NormalizeName))
+            : Pragmas_(BuildNameIndex(std::move(names.Pragmas), [](const TString& s) { return NYql::NormalizeName(s); }))
+            , Types_(BuildNameIndex(std::move(names.Types), [](const TString& s) { return NYql::NormalizeName(s); }))
+            , Functions_(BuildNameIndex(std::move(names.Functions), [](const TString& s) { return NYql::NormalizeName(s); }))
             , Hints_([hints = std::move(names.Hints)] {
                 THashMap<EStatementKind, TNameIndex> index;
                 for (auto& [k, hints] : hints) {
-                    index.emplace(k, BuildNameIndex(std::move(hints), NormalizeName));
+                    index.emplace(k, BuildNameIndex(std::move(hints), [](const TString& s) { return NYql::NormalizeName(s); }));
                 }
                 return index;
             }())
