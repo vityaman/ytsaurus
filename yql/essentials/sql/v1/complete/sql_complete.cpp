@@ -89,24 +89,38 @@ namespace NSQLComplete {
                 request.Constraints.Hint = std::move(constraints);
             }
 
+            if (context.Object && context.Object->Kinds.contains(TLocalSyntaxContext::TObject::EKind::Folder)) {
+                request.Constraints.Folder = TFolderName::TConstraints{};
+                if (context.Object->Path != "") {
+                    request.Prefix = context.Object->Path;
+                }
+            }
+
+            if (context.Object && context.Object->Kinds.contains(TLocalSyntaxContext::TObject::EKind::Table)) {
+                request.Constraints.Table = TTableName::TConstraints{};
+                if (context.Object->Path != "") {
+                    request.Prefix = context.Object->Path;
+                }
+            }
+
             if (request.IsEmpty()) {
                 return NThreading::MakeFuture<TVector<TCandidate>>({});
             }
 
             return Names->Lookup(std::move(request))
-                .Apply([keywords = std::move(context.Keywords)](NThreading::TFuture<TNameResponse> f) {
+                .Apply([context = std::move(context)](NThreading::TFuture<TNameResponse> f) {
                     TNameResponse response = f.ExtractValue();
-                    return Convert(std::move(response.RankedNames), std::move(keywords));
+                    return Convert(std::move(response.RankedNames), std::move(context));
                 });
         }
 
-        static TVector<TCandidate> Convert(TVector<TGenericName> names, TLocalSyntaxContext::TKeywords keywords) {
+        static TVector<TCandidate> Convert(TVector<TGenericName> names, TLocalSyntaxContext context) {
             TVector<TCandidate> candidates;
             for (auto& name : names) {
                 candidates.emplace_back(std::visit([&](auto&& name) -> TCandidate {
                     using T = std::decay_t<decltype(name)>;
                     if constexpr (std::is_base_of_v<TKeyword, T>) {
-                        TVector<TString>& seq = keywords[name.Content];
+                        TVector<TString>& seq = context.Keywords[name.Content];
                         seq.insert(std::begin(seq), name.Content);
                         return {ECandidateKind::Keyword, FormatKeywords(seq)};
                     }
@@ -122,6 +136,24 @@ namespace NSQLComplete {
                     }
                     if constexpr (std::is_base_of_v<THintName, T>) {
                         return {ECandidateKind::HintName, std::move(name.Indentifier)};
+                    }
+                    if constexpr (std::is_base_of_v<TFolderName, T>) {
+                        name.Indentifier.append('/');
+                        if (!context.IsEnclosed) {
+                            name.Indentifier.prepend('`');
+                            name.Indentifier.append('`');
+                        }
+                        return {ECandidateKind::FolderName, std::move(name.Indentifier)};
+                    }
+                    if constexpr (std::is_base_of_v<TTableName, T>) {
+                        if (!context.IsEnclosed) {
+                            name.Indentifier.prepend('`');
+                            name.Indentifier.append('`');
+                        }
+                        return {ECandidateKind::TableName, std::move(name.Indentifier)};
+                    }
+                    if constexpr (std::is_base_of_v<TUnkownName, T>) {
+                        return {ECandidateKind::UnknownName, std::move(name.Content)};
                     }
                 }, std::move(name)));
             }
@@ -160,6 +192,15 @@ void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandid
             break;
         case NSQLComplete::ECandidateKind::HintName:
             out << "HintName";
+            break;
+        case NSQLComplete::ECandidateKind::FolderName:
+            out << "FolderName";
+            break;
+        case NSQLComplete::ECandidateKind::TableName:
+            out << "TableName";
+            break;
+        case NSQLComplete::ECandidateKind::UnknownName:
+            out << "UnknownName";
             break;
     }
 }

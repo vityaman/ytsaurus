@@ -1,8 +1,11 @@
 #include "sql_complete.h"
 
+#include <yql/essentials/sql/v1/complete/name/object/static/schema_gateway.h>
+#include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/frequency.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/ranking.h>
+#include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
 
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
@@ -30,10 +33,12 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
+    using ECandidateKind::FolderName;
     using ECandidateKind::FunctionName;
     using ECandidateKind::HintName;
     using ECandidateKind::Keyword;
     using ECandidateKind::PragmaName;
+    using ECandidateKind::TableName;
     using ECandidateKind::TypeName;
 
     TLexerSupplier MakePureLexerSupplier() {
@@ -49,6 +54,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngineUT() {
         TLexerSupplier lexer = MakePureLexerSupplier();
+
         NameSet names = {
             .Pragmas = {"yson.CastToString"},
             .Types = {"Uint64"},
@@ -58,8 +64,24 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {EStatementKind::Insert, {"EXPIRATION"}},
             },
         };
+
+        THashMap<TString, TVector<TFolderEntry>> fs = {
+            {"/", {{"Folder", "local"},
+                   {"Folder", "test"},
+                   {"Folder", "prod"}}},
+            {"/local/", {{"Table", "example"},
+                         {"Table", "account"},
+                         {"Table", "abacaba"}}},
+            {"/test/", {{"Folder", "service"},
+                        {"Table", "meta"}}},
+            {"/test/service/", {{"Table", "example"}}},
+        };
+
         auto ranking = MakeDefaultRanking({});
-        INameService::TPtr service = MakeStaticNameService(std::move(names), std::move(ranking));
+        INameService::TPtr service = MakeUnionNameService({
+            MakeStaticNameService(std::move(names), std::move(ranking)),
+            MakeSchemaNameService(MakeStaticSchemaGateway(std::move(fs))),
+        });
         return MakeSqlCompletionEngine(std::move(lexer), std::move(service));
     }
 
@@ -365,23 +387,55 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     }
 
     Y_UNIT_TEST(SelectFrom) {
-        TVector<TCandidate> expected = {
-            {Keyword, "ANY"},
-            {Keyword, "CALLABLE"},
-            {Keyword, "DICT"},
-            {Keyword, "ENUM"},
-            {Keyword, "FLOW"},
-            {Keyword, "LIST"},
-            {Keyword, "OPTIONAL"},
-            {Keyword, "RESOURCE"},
-            {Keyword, "SET"},
-            {Keyword, "STRUCT"},
-            {Keyword, "TAGGED"},
-            {Keyword, "TUPLE"},
-            {Keyword, "VARIANT"},
-        };
         auto engine = MakeSqlCompletionEngineUT();
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM "), expected);
+        {
+            TVector<TCandidate> expected = {
+                {Keyword, "ANY"},
+                {Keyword, "CALLABLE"},
+                {Keyword, "DICT"},
+                {Keyword, "ENUM"},
+                {Keyword, "FLOW"},
+                {Keyword, "LIST"},
+                {Keyword, "OPTIONAL"},
+                {Keyword, "RESOURCE"},
+                {Keyword, "SET"},
+                {Keyword, "STRUCT"},
+                {Keyword, "TAGGED"},
+                {Keyword, "TUPLE"},
+                {Keyword, "VARIANT"},
+                {FolderName, "`local/`"},
+                {FolderName, "`test/`"},
+                {FolderName, "`prod/`"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM "), expected);
+        }
+        {
+            TVector<TCandidate> expected = {};
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `#"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {FolderName, "local/"},
+                {FolderName, "test/"},
+                {FolderName, "prod/"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `#`"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "example"},
+                {TableName, "account"},
+                {TableName, "abacaba"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `local/#`"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "account"},
+                {TableName, "abacaba"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `local/a#`"), expected);
+        }
     }
 
     Y_UNIT_TEST(SelectWhere) {

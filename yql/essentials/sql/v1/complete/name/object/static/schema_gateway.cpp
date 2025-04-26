@@ -23,6 +23,9 @@ namespace NSQLComplete {
 
             NThreading::TFuture<TListResponse> List(const TListRequest& request) const override {
                 auto [path, prefix] = ParsePath(request.Path);
+                if (!path.StartsWith('/')) {
+                    path.prepend('/');
+                }
 
                 TVector<TFolderEntry> entries;
                 if (const auto* data = Data_.FindPtr(path)) {
@@ -49,7 +52,7 @@ namespace NSQLComplete {
             }
 
         private:
-            static std::tuple<TStringBuf, TStringBuf> ParsePath(TString path Y_LIFETIME_BOUND) {
+            static std::tuple<TString, TString> ParsePath(TString path Y_LIFETIME_BOUND) {
                 size_t pos = path.find_last_of('/');
                 if (pos == TString::npos) {
                     return {"", path};
@@ -57,7 +60,7 @@ namespace NSQLComplete {
 
                 TStringBuf head, tail;
                 TStringBuf(path).SplitAt(pos + 1, head, tail);
-                return {head, tail};
+                return {TString(head), TString(tail)};
             }
 
             THashMap<TString, TVector<TFolderEntry>> Data_;

@@ -6,6 +6,7 @@
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
 
@@ -29,12 +30,24 @@ namespace NSQLComplete {
             EStatementKind StatementKind;
         };
 
+        struct TObject {
+            enum class EKind {
+                Folder,
+                Table,
+            };
+
+            TString Path;
+            THashSet<EKind> Kinds;
+        };
+
         TKeywords Keywords;
         std::optional<TPragma> Pragma;
         bool IsTypeName = false;
         std::optional<TFunction> Function;
         std::optional<THint> Hint;
+        std::optional<TObject> Object;
         TEditTextRange EditRange;
+        bool IsEnclosed = false;
     };
 
     class ILocalSyntaxAnalysis {

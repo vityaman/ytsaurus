@@ -7,5 +7,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    schema
     static
+    union
 )

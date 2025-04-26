@@ -74,15 +74,24 @@ namespace NSQLComplete {
                 return {};
             }
 
+            if (auto enclosing = Enclosing(tokens, caret); enclosing && enclosing->Name == "ID_QUOTED") {
+                enclosing->Content.erase(0, 1);
+                enclosing->Content.pop_back();
+                return {
+                    .Object = TableMatch(enclosing->Content, candidates),
+                    .EditRange = CurrentTokenEditTextRange(tokens, caret),
+                    .IsEnclosed = true,
+                };
+            }
+
             TLocalSyntaxContext context;
             context.Keywords = SiftedKeywords(candidates);
             context.Pragma = PragmaMatch(tokens, candidates);
             context.IsTypeName = IsTypeNameMatched(candidates);
             context.Function = FunctionMatch(tokens, candidates);
             context.Hint = HintMatch(candidates);
-
+            context.Object = TableMatch(/* path = */ "", candidates);
             context.EditRange = CurrentTokenEditTextRange(tokens, caret);
-
             return context;
         }
 
@@ -125,17 +134,19 @@ namespace NSQLComplete {
             return true;
         }
 
-        static bool IsCaretEnslosed(const TParsedTokenList& tokens, TCaretTokenPosition caret) {
+        static std::optional<NSQLTranslation::TParsedToken> Enclosing(const TParsedTokenList& tokens, TCaretTokenPosition caret) {
             if (tokens.empty() || caret.PrevTokenIndex != caret.NextTokenIndex) {
-                return false;
+                return std::nullopt;
             }
+            return tokens.back();
+        }
 
-            const auto& token = tokens.back();
-            return token.Name == "STRING_VALUE" ||
-                   token.Name == "ID_QUOTED" ||
-                   token.Name == "DIGIGTS" ||
-                   token.Name == "INTEGER_VALUE" ||
-                   token.Name == "REAL";
+        static bool IsCaretEnslosed(const TParsedTokenList& tokens, TCaretTokenPosition caret) {
+            auto token = Enclosing(tokens, caret);
+            return token && (token->Name == "STRING_VALUE" ||
+                             token->Name == "DIGIGTS" ||
+                             token->Name == "INTEGER_VALUE" ||
+                             token->Name == "REAL");
         }
 
         TLocalSyntaxContext::TKeywords SiftedKeywords(const TC3Candidates& candidates) const {
@@ -199,6 +210,21 @@ namespace NSQLComplete {
             return TLocalSyntaxContext::THint{
                 .StatementKind = *stmt,
             };
+        }
+
+        static std::optional<TLocalSyntaxContext::TObject> TableMatch(
+            TString path, const TC3Candidates& candidates) {
+            if (!AnyOf(candidates.Rules, RuleAdapted(IsLikelyTableStack))) {
+                return std::nullopt;
+            }
+
+            TLocalSyntaxContext::TObject object;
+            object.Kinds = {
+                TLocalSyntaxContext::TObject::EKind::Folder,
+                TLocalSyntaxContext::TObject::EKind::Table,
+            };
+            object.Path = std::move(path);
+            return object;
         }
 
         static std::optional<size_t> PragmaNamespaceTokenIndex(const TParsedTokenList& tokens) {
