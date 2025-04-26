@@ -46,6 +46,7 @@ namespace NSQLComplete {
                         }
                         response.RankedNames.emplace_back(std::move(name));
                     }
+                    response.NameHintLength = list.NameHintLength;
                     return response;
                 });
             }

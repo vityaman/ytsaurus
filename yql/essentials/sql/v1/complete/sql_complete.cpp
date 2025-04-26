@@ -37,29 +37,16 @@ namespace NSQLComplete {
             }
 
             TLocalSyntaxContext context = SyntaxAnalysis->Analyze(input);
-
-            TCompletedToken completedToken = GetCompletedToken(input, context.EditRange);
-
-            return GetCandidates(std::move(context), completedToken)
-                .Apply([completedToken](NThreading::TFuture<TVector<TCandidate>> f) {
-                    return TCompletion{
-                        .CompletedToken = std::move(completedToken),
-                        .Candidates = f.ExtractValue(),
-                    };
-                });
+            return GetCandidates(input, std::move(context));
         }
 
     private:
-        TCompletedToken GetCompletedToken(TCompletionInput input, TEditTextRange range) {
-            return {
-                .Content = input.Text.SubStr(range.Begin, range.End - range.Begin),
-                .SourcePosition = range.Begin,
-            };
-        }
+        NThreading::TFuture<TCompletion> GetCandidates(TCompletionInput input, TLocalSyntaxContext context) const {
+            auto token = input.Text.SubStr(
+                context.EditRange.Begin, context.EditRange.End - context.EditRange.Begin);
 
-        NThreading::TFuture<TVector<TCandidate>> GetCandidates(TLocalSyntaxContext context, const TCompletedToken& prefix) const {
             TNameRequest request = {
-                .Prefix = TString(prefix.Content),
+                .Prefix = TString(token),
                 .Limit = Configuration.Limit,
             };
 
@@ -104,13 +91,32 @@ namespace NSQLComplete {
             }
 
             if (request.IsEmpty()) {
-                return NThreading::MakeFuture<TVector<TCandidate>>({});
+                return NThreading::MakeFuture<TCompletion>({
+                    .CompletedToken = {
+                        .Content = token,
+                        .SourcePosition = context.EditRange.Begin,
+                    },
+                });
             }
 
             return Names->Lookup(std::move(request))
-                .Apply([context = std::move(context)](NThreading::TFuture<TNameResponse> f) {
+                .Apply([context = std::move(context), token, input](NThreading::TFuture<TNameResponse> f) {
                     TNameResponse response = f.ExtractValue();
-                    return Convert(std::move(response.RankedNames), std::move(context));
+
+                    TCompletion completion;
+                    completion.Candidates = Convert(std::move(response.RankedNames), std::move(context));
+                    completion.CompletedToken = {
+                        .Content = token,
+                        .SourcePosition = context.EditRange.Begin,
+                    };
+
+                    if (response.NameHintLength) {
+                        auto prefix = input.Text.Head(input.CursorPosition);
+                        completion.CompletedToken.Content =
+                            prefix.Tail(prefix.size() - *response.NameHintLength);
+                    }
+
+                    return completion;
                 });
         }
 

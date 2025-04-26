@@ -25,7 +25,8 @@ namespace NSQLComplete {
                     TNameResponse response;
                     for (auto f : children) {
                         TNameResponse child = f.ExtractValue();
-                        if (response.NameHintLength == 0) {
+                        if (child.NameHintLength) {
+                            Y_ENSURE(!response.NameHintLength);
                             response.NameHintLength = child.NameHintLength;
                         }
                         std::ranges::move(

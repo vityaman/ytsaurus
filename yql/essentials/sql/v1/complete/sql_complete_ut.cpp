@@ -68,13 +68,15 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         THashMap<TString, TVector<TFolderEntry>> fs = {
             {"/", {{"Folder", "local"},
                    {"Folder", "test"},
-                   {"Folder", "prod"}}},
+                   {"Folder", "prod"},
+                   {"Folder", ".sys"}}},
             {"/local/", {{"Table", "example"},
                          {"Table", "account"},
                          {"Table", "abacaba"}}},
             {"/test/", {{"Folder", "service"},
                         {"Table", "meta"}}},
             {"/test/service/", {{"Table", "example"}}},
+            {"/.sys/", {{"Table", "status"}}},
         };
 
         auto ranking = MakeDefaultRanking({});
@@ -406,6 +408,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {FolderName, "`local/`"},
                 {FolderName, "`test/`"},
                 {FolderName, "`prod/`"},
+                {FolderName, "`.sys/`"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM "), expected);
         }
@@ -414,27 +417,46 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `#"), expected);
         }
         {
+            TString input = "SELECT * FROM `#`";
             TVector<TCandidate> expected = {
                 {FolderName, "local/"},
                 {FolderName, "test/"},
                 {FolderName, "prod/"},
+                {FolderName, ".sys/"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `#`"), expected);
+            TCompletion actual = engine->Complete(SharpedInput(input));
+            UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(actual.CompletedToken.Content, "");
         }
         {
+            TString input = "SELECT * FROM `local/#`";
             TVector<TCandidate> expected = {
                 {TableName, "example"},
                 {TableName, "account"},
                 {TableName, "abacaba"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `local/#`"), expected);
+            TCompletion actual = engine->Complete(SharpedInput(input));
+            UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(actual.CompletedToken.Content, "");
         }
         {
+            TString input = "SELECT * FROM `local/a#`";
             TVector<TCandidate> expected = {
                 {TableName, "account"},
                 {TableName, "abacaba"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `local/a#`"), expected);
+            TCompletion actual = engine->Complete(SharpedInput(input));
+            UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(actual.CompletedToken.Content, "a");
+        }
+        {
+            TString input = "SELECT * FROM `.sy#`";
+            TVector<TCandidate> expected = {
+                {FolderName, ".sys/"},
+            };
+            TCompletion actual = engine->Complete(SharpedInput(input));
+            UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(actual.CompletedToken.Content, ".sy");
         }
     }
 

@@ -90,7 +90,7 @@ namespace NSQLComplete {
 
     struct TNameResponse {
         TVector<TGenericName> RankedNames;
-        size_t NameHintLength = 0;
+        std::optional<size_t> NameHintLength;
     };
 
     class INameService: public TThrRefBase {
