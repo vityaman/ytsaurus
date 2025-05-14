@@ -1,6 +1,15 @@
 #include "metric.h"
 
-#include <yql/essentials/sql/v1/complete/name/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/cluster/static/discovery.h>
+#include <yql/essentials/sql/v1/complete/name/object/dispatch/schema.h>
+#include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
+#include <yql/essentials/sql/v1/complete/name/object/simple/static/schema.h>
+#include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
+#include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
+#include <yql/essentials/sql/v1/complete/name/service/cluster/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
 
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
@@ -22,10 +31,75 @@ Y_UNIT_TEST_SUITE(MetricTests) {
         };
     }
 
+    ISqlCompletionEngine::TPtr MakeSqlCompletionEngineUT() {
+        TLexerSupplier lexer = MakePureLexerSupplier();
+
+        TNameSet names = {
+            .Pragmas = {
+                "yson.CastToString",
+                "yt.RuntimeCluster",
+                "yt.RuntimeClusterSelection",
+            },
+            .Types = {"Uint64"},
+            .Functions = {
+                "StartsWith",
+                "DateTime::Split",
+                "Python::__private",
+            },
+            .Hints = {
+                {EStatementKind::Select, {"XLOCK"}},
+                {EStatementKind::Insert, {"EXPIRATION"}},
+            },
+        };
+
+        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fss = {
+            {"", {{"/", {{"Folder", "local"},
+                         {"Folder", "test"},
+                         {"Folder", "prod"},
+                         {"Folder", ".sys"}}},
+                  {"/local/", {{"Table", "example"},
+                               {"Table", "account"},
+                               {"Table", "abacaba"}}},
+                  {"/test/", {{"Folder", "service"},
+                              {"Table", "meta"}}},
+                  {"/test/service/", {{"Table", "example"}}},
+                  {"/.sys/", {{"Table", "status"}}}}},
+            {"yt:saurus",
+             {{"/", {{"Folder", "maxim"},
+                     {"Table", "series"}}},
+              {"/maxim/", {{"Table", "seasons"}}}}},
+        };
+
+        TVector<TString> clusters;
+        for (const auto& [cluster, _] : fss) {
+            clusters.emplace_back(cluster);
+        }
+        EraseIf(clusters, [](const auto& s) { return s.empty(); });
+
+        TFrequencyData frequency;
+
+        IRanking::TPtr ranking = MakeDefaultRanking(frequency);
+
+        THashMap<TString, ISchema::TPtr> schemasByCluster;
+        for (auto& [cluster, fs] : fss) {
+            schemasByCluster[std::move(cluster)] =
+                MakeSimpleSchema(
+                    MakeStaticSimpleSchema(std::move(fs)));
+        }
+
+        TVector<INameService::TPtr> children = {
+            MakeStaticNameService(std::move(names), frequency),
+            MakeSchemaNameService(MakeDispatchSchema(std::move(schemasByCluster))),
+            MakeClusterNameService(MakeStaticClusterDiscovery(std::move(clusters))),
+        };
+
+        INameService::TPtr service = MakeUnionNameService(std::move(children), ranking);
+
+        return MakeSqlCompletionEngine(std::move(lexer), std::move(service));
+    }
+
     Y_UNIT_TEST(SimpleQueryKeystrokeSavings) {
-        auto engine = MakeSqlCompletionEngine(
-            MakePureLexerSupplier(),
-            MakeStaticNameService(MakeDefaultNameSet()));
+        auto engine = MakeSqlCompletionEngineUT();
 
         TString query = "SELECT 1 FROM a";
         size_t keysWithPrediction = (2 + 1) + (1) + 1 + (1 + 1) + 1;
@@ -36,50 +110,43 @@ Y_UNIT_TEST_SUITE(MetricTests) {
         UNIT_ASSERT_DOUBLES_EQUAL(expected, actual, 0.01);
     }
 
-    Y_UNIT_TEST(CoolQueryKeystrokeSavings) {
-        auto engine = MakeSqlCompletionEngine(
-            MakePureLexerSupplier(),
-            MakeStaticNameService(MakeDefaultNameSet()));
+    Y_UNIT_TEST(SelectKeystrokeSavings) {
+        auto engine = MakeSqlCompletionEngineUT();
 
         TString query = R"(
-$json_parse = @@
-    (json_string) -> (
-        SELECT
-            JSON_VALUE(json_string, '$.video_id') AS video_id,
-            JSON_VALUE(json_string, '$.duration') AS duration,
-            JSON_VALUE(json_string, '$.timestamp') AS timestamp
-    )
-@@;
-
 SELECT
-    user_id,
-    video_id,
-    MAX(CAST(duration AS Double)) AS total_watch_time_sec,
-    COUNT(*) AS num_events,
-    MAX(CAST(duration AS Double)) / MAX(video_meta.duration) * 100 AS completion_pct,
-    IF(MAX(CAST(duration AS Double)) / MAX(video_meta.duration) < 25, 1, 0) AS is_early_dropoff,
-    SUM(CAST(duration AS Double)) OVER (
-        PARTITION BY user_id, video_id 
-        ORDER BY CAST(timestamp AS Timestamp)
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    ) AS cumulative_watch_time
-FROM 
-    `video_events_raw`
-    CROSS JOIN LATERAL $json_parse(event_data) AS parsed
-    JOIN `video_metadata` AS video_meta 
-        ON parsed.video_id = video_meta.video_id
-WHERE 
-    event_type = 'video_play'
-    AND CAST(timestamp AS Timestamp) BETWEEN 
-        DateTime::MakeDate(2023, 1, 1) AND CurrentUtcDate()
-GROUP BY 
-    user_id, video_id, timestamp
-ORDER BY 
-    total_watch_time_sec DESC
-LIMIT 1000;
-        )";
+    Re2::Capture("a.*")(sa.title),
+    CAST(sr.series_id AS Uint64),
+    sa.season_id
+FROM
+    yt:saurus.`/maxim/seasons` AS sa
+INNER JOIN
+    `/test/service/series` AS sr
+ON sa.series_id = sr.series_id
+WHERE sa.series_id = 1;
+)";
 
         double value = EvaluateKeystrokeSavingsAscii(*engine, query);
+        Cerr << "KS(SELECT) = " << value << Endl;
         UNIT_ASSERT_GT(value, 0.1);
     }
+
+    Y_UNIT_TEST(CreateKeystrokeSavings) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = R"(
+CREATE TABLE `/test/service/series` (
+    series_id Uint64,
+    title Utf8,
+    series_info Utf8,
+    release_date Uint64,
+    PRIMARY KEY (series_id)
+);
+)";
+
+        double value = EvaluateKeystrokeSavingsAscii(*engine, query);
+        Cerr << "KS(CREATE) = " << value << Endl;
+        UNIT_ASSERT_GT(value, 0.1);
+    }
+
 } // Y_UNIT_TEST_SUITE(MetricTests)
