@@ -6,6 +6,7 @@ namespace NSQLComplete {
 
     double EvaluateKeystrokeSavingsAscii(ISqlCompletionEngine& engine, TStringBuf text) {
         using TCIAStringBuf = TCaseInsensitiveAsciiStringBuf;
+
         const size_t keysNormal = text.size();
         size_t keysWithPrediction = 0;
 
