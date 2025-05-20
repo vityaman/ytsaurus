@@ -19,6 +19,7 @@ namespace NSQLComplete {
 
                 if (TCIAStringBuf expected = TStringBuf(text).substr(i - token.Content.length(), candidate.Content.length());
                     expected == TCIAStringBuf(candidate.Content)) {
+                    Cerr << "[quality] Accept '" << candidate.Content << "'" << Endl;
                     i += skip;
                 }
             }
