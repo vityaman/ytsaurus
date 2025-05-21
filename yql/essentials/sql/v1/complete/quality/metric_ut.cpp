@@ -17,7 +17,50 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/charset/utf8.h>
+
 using namespace NSQLComplete;
+
+class TDummyNameService: public INameService {
+public:
+    TDummyNameService() {
+        TVector<TString> lower;
+        lower.reserve(Words_.size());
+        for (const auto& word : Words_) {
+            lower.emplace_back(ToLowerUTF8(word));
+        }
+        for (const auto& word : lower) {
+            Words_.emplace_back(ToLowerUTF8(word));
+        }
+    }
+
+    NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
+        TNameResponse response;
+        for (const auto& word : Words_) {
+            if (word.StartsWith(request.Prefix)) {
+                TKeyword keyword;
+                keyword.Content = word;
+                response.RankedNames.emplace_back(std::move(keyword));
+            }
+        }
+        return NThreading::MakeFuture(std::move(response));
+    }
+
+private:
+    TVector<TString> Words_ = {
+        "SELECT",
+        "FROM",
+        "WHERE",
+        "GROUP",
+        "ORDER",
+        "BY",
+        "LIMIT",
+        "OFFSET",
+        "EXPLAIN",
+        "AST",
+        "SET",
+    };
+};
 
 Y_UNIT_TEST_SUITE(MetricTests) {
     TLexerSupplier MakePureLexerSupplier() {
@@ -29,6 +72,12 @@ Y_UNIT_TEST_SUITE(MetricTests) {
                 lexers, ansi, /* antlr4 = */ true,
                 NSQLTranslationV1::ELexerFlavor::Pure);
         };
+    }
+
+    ISqlCompletionEngine::TPtr MakeDummySqlCompletionEngine() {
+        return MakeSqlCompletionEngine(
+            MakePureLexerSupplier(),
+            MakeIntrusive<TDummyNameService>());
     }
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngineUT() {
@@ -98,22 +147,7 @@ Y_UNIT_TEST_SUITE(MetricTests) {
         return MakeSqlCompletionEngine(std::move(lexer), std::move(service));
     }
 
-    Y_UNIT_TEST(SimpleQueryKeystrokeSavings) {
-        auto engine = MakeSqlCompletionEngineUT();
-
-        TString query = "SELECT 1 FROM a";
-        size_t keysWithPrediction = (2 + 1) + (1) + 1 + (1 + 1) + 1;
-        auto expected = static_cast<double>(query.size() - keysWithPrediction) / query.size();
-
-        auto actual = EvaluateKeystrokeSavingsAscii(*engine, query);
-
-        UNIT_ASSERT_DOUBLES_EQUAL(expected, actual, 0.01);
-    }
-
-    Y_UNIT_TEST(SelectKeystrokeSavings) {
-        auto engine = MakeSqlCompletionEngineUT();
-
-        TString query = R"(
+    static const TString SelectQuery = R"(
 SELECT
     Re2::Capture("a.*")(sa.title),
     CAST(sr.series_id AS Uint64),
@@ -126,15 +160,7 @@ ON sa.series_id = sr.series_id
 WHERE sa.series_id = 1;
 )";
 
-        double value = EvaluateKeystrokeSavingsAscii(*engine, query);
-        Cerr << "KS(SELECT) = " << value << Endl;
-        UNIT_ASSERT_GT(value, 0.1);
-    }
-
-    Y_UNIT_TEST(CreateKeystrokeSavings) {
-        auto engine = MakeSqlCompletionEngineUT();
-
-        TString query = R"(
+    static const TString CreateQuery = R"(
 CREATE TABLE `/test/service/series` (
     series_id Uint64,
     title Utf8,
@@ -144,8 +170,53 @@ CREATE TABLE `/test/service/series` (
 );
 )";
 
+    Y_UNIT_TEST(SimpleQueryKeystrokeSavings) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = "SELECT 1 FROM a";
+        size_t keysWithPrediction = (2 + 1) + (1) + 1 + (1 + 1) + 1;
+        auto expected = static_cast<double>(query.size() - keysWithPrediction) / query.size();
+
+        auto actual = EvaluateKeystrokeSavingsAscii(*engine, query);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(expected, actual, 0.01);
+    }
+
+    Y_UNIT_TEST(OldSelectKeystrokeSavings) {
+        auto engine = MakeDummySqlCompletionEngine();
+
+        TString query = SelectQuery;
+
         double value = EvaluateKeystrokeSavingsAscii(*engine, query);
-        Cerr << "KS(CREATE) = " << value << Endl;
+        Cerr << "KS(Old, SELECT) = " << value << Endl;
+    }
+
+    Y_UNIT_TEST(OldCreateKeystrokeSavings) {
+        auto engine = MakeDummySqlCompletionEngine();
+
+        TString query = CreateQuery;
+
+        double value = EvaluateKeystrokeSavingsAscii(*engine, query);
+        Cerr << "KS(Old, CREATE) = " << value << Endl;
+    }
+
+    Y_UNIT_TEST(NewSelectKeystrokeSavings) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = SelectQuery;
+
+        double value = EvaluateKeystrokeSavingsAscii(*engine, query);
+        Cerr << "KS(New, SELECT) = " << value << Endl;
+        UNIT_ASSERT_GT(value, 0.1);
+    }
+
+    Y_UNIT_TEST(NewCreateKeystrokeSavings) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = CreateQuery;
+
+        double value = EvaluateKeystrokeSavingsAscii(*engine, query);
+        Cerr << "KS(New, CREATE) = " << value << Endl;
         UNIT_ASSERT_GT(value, 0.1);
     }
 
