@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             TVector<TCandidate> expected = {
                 {HintName, "XLOCK"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "PROCESS my_table USING $udf(TableRows()) WITH "), expected);
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "PROCESS `my_table` USING $udf(TableRows()) WITH "), expected);
         }
         {
             TVector<TCandidate> expected = {
@@ -854,7 +854,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {Keyword, "SCHEMA"},
                 {HintName, "XLOCK"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "REDUCE my_table WITH "), expected);
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "REDUCE `my_table` WITH "), expected);
         }
         {
             TVector<TCandidate> expected = {
@@ -862,7 +862,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {Keyword, "SCHEMA"},
                 {HintName, "XLOCK"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT key FROM my_table WITH "), expected);
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT key FROM `my_table` WITH "), expected);
         }
     }
 
@@ -874,7 +874,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         auto engine = MakeSqlCompletionEngineUT();
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "INSERT INTO my_table WITH "), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "INSERT INTO `my_table` WITH "), expected);
     }
 
     Y_UNIT_TEST(CursorPosition) {
