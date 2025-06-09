@@ -1,0 +1,116 @@
+# TODO: refine Leave options
+AccessModifierOffset: 0
+AlignAfterOpenBracket: DontAlign
+AlignArrayOfStructures: None
+AlignConsecutiveAssignments: None
+AlignConsecutiveBitFields: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: None
+AlignConsecutiveShortCaseStatements:
+    Enabled: false
+AlignEscapedNewlines: DontAlign
+AlignOperands: DontAlign
+AlignTrailingComments: 
+    Kind: Leave
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowBreakBeforeNoexceptSpecifier: Always
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortCompoundRequirementOnASingleLine: true
+AllowShortEnumsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: true
+AlwaysBreakBeforeMultilineStrings: false
+BinPackArguments: true
+BinPackParameters: true
+BitFieldColonSpacing: Both
+BracedInitializerIndentWidth: 4
+BreakAdjacentStringLiterals: false
+BreakAfterAttributes: Leave
+BreakBeforeBinaryOperators: None
+BreakBeforeBraces: Attach
+BreakBeforeConceptDeclarations: Always
+BreakBeforeInlineASMColon: OnlyMultiline
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeComma
+BreakInheritanceList: AfterComma
+BreakStringLiterals: true
+ColumnLimit: 160
+CompactNamespaces: false
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
+Cpp11BracedListStyle: true
+DerivePointerAlignment: true
+EmptyLineAfterAccessModifier: Leave
+EmptyLineBeforeAccessModifier: Leave
+FixNamespaceComments: true
+ForEachMacros: [
+    foreach,
+    Q_FOREACH,
+    BOOST_FOREACH,
+    Y_DEFER # Is not a foreach, but correct formatting is achieved
+]
+IfMacros: [
+    with_lock # Is not an if, but correct formatting is achieved
+]
+IncludeBlocks: Preserve
+IndentAccessModifiers: false
+IndentCaseBlocks: false
+IndentCaseLabels: false
+IndentGotoLabels: false
+IndentPPDirectives: None
+IndentRequiresClause: true
+IndentWidth: 4
+IndentWrappedFunctionNames: false
+InsertBraces: false
+InsertNewlineAtEOF: true
+InsertTrailingCommas: None # TODO: refine
+# TODO: refine KeepEmptyLines
+LambdaBodyIndentation: Signature
+Language: Cpp
+LineEnding: LF
+MaxEmptyLinesToKeep: 8 # TODO: refine
+NamespaceIndentation: None
+NamespaceMacros: [Y_UNIT_TEST_SUITE]
+PackConstructorInitializers: BinPack
+# TODO: refine PenaltyXXX
+PointerAlignment: Left
+# TODO: refine QualifierAlignmentStyle
+# TODO: refine QualifierOrder 
+ReferenceAlignment: Left
+ReflowComments: false # TODO: refine
+RemoveBracesLLVM: false
+RemoveParentheses: Leave
+RemoveSemicolon: true
+RequiresClausePosition: OwnLine
+RequiresExpressionIndentation: OuterScope
+SeparateDefinitionBlocks: Leave
+SkipMacroDefinitionBody: false # TODO: refine
+# TODO: refine SortIncludes
+SortUsingDeclarations: Never # TODO: refine
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: true
+SpaceAroundPointerQualifiers: Default # TODO: refine
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: false
+SpaceBeforeCpp11BracedList: false # TODO: refine
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: false
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: false
+SpaceBeforeSquareBrackets: false
+SpaceInEmptyBlock: false
+# TODO: refine SpacesBeforeTrailingComments
+SpacesInAngles: Leave # TODO: refine
+SpacesInLineCommentPrefix: 
+    Minimum: 0 # TODO: refine
+    Maximum: -1 # TODO: refine
+SpacesInParens: Never
+SpacesInSquareBrackets: false
+StatementAttributeLikeMacros: [ythrow]
+TabWidth: 4
+UseTab: Never
